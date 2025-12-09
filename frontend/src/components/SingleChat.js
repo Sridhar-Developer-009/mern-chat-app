@@ -6,7 +6,7 @@ import { IconButton, Spinner, useToast } from "@chakra-ui/react";
 import { getSender, getSenderFull } from "../config/ChatLogics";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { ArrowBackIcon } from "@chakra-ui/icons";
+import { ArrowBackIcon, ArrowForwardIcon } from "@chakra-ui/icons";
 import ProfileModal from "./miscellaneous/ProfileModal";
 import ScrollableChat from "./ScrollableChat";
 import Lottie from "react-lottie";
@@ -71,8 +71,11 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
   };
 
   const sendMessage = async (event) => {
-    if (event.key === "Enter" && newMessage) {
-      socket.emit("stop typing", selectedChat._id);
+    // Allow sending on Enter key or when a click event triggers this handler
+    const isEnter = event?.key === "Enter";
+    const isClick = event?.type === "click";
+    if ((isEnter || isClick) && newMessage) {
+      if (isEnter) socket.emit("stop typing", selectedChat._id);
       try {
         const config = {
           headers: {
@@ -80,17 +83,25 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
             Authorization: `Bearer ${user.token}`,
           },
         };
+
+        // Optimistically clear the input for a snappy UI
+        const messageToSend = newMessage;
         setNewMessage("");
+
         const { data } = await axios.post(
           "/api/message",
           {
-            content: newMessage,
-            chatId: selectedChat,
+            content: messageToSend,
+            chatId: selectedChat._id,
           },
           config
         );
+
+        // emit to socket so all clients receive it immediately
         socket.emit("new message", data);
-        setMessages([...messages, data]);
+
+        // update local messages state safely
+        setMessages((prev) => [...prev, data]);
       } catch (error) {
         toast({
           title: "Error Occured!",
@@ -239,13 +250,22 @@ const SingleChat = ({ fetchAgain, setFetchAgain }) => {
               ) : (
                 <></>
               )}
-              <Input
-                variant="filled"
-                bg="#E0E0E0"
-                placeholder="Enter a message.."
-                value={newMessage}
-                onChange={typingHandler}
-              />
+              <Box d="flex">
+                <Input
+                  variant="filled"
+                  bg="#E0E0E0"
+                  placeholder="Enter a message.."
+                  value={newMessage}
+                  onChange={typingHandler}
+                  mr={2}
+                />
+                <IconButton
+                  colorScheme="blue"
+                  aria-label="Send message"
+                  icon={<ArrowForwardIcon />}
+                  onClick={sendMessage}
+                />
+              </Box>
             </FormControl>
           </Box>
         </>
